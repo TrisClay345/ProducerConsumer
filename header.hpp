@@ -1,6 +1,14 @@
+/*
+    Tristian Clayman
+    header.hpp - header file for producer-consumer problem
+    3/28/2025
+*/
 #ifndef HEADER_CPP
 #define HEADER_CPP
 
+/*
+    This file just has the include statements and structure used for shared memory.
+*/
 #include <iostream>
 #include <semaphore.h>
 #include <sys/ipc.h>
