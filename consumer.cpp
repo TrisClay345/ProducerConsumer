@@ -2,39 +2,44 @@
 using std::cout; using std::endl;
 
 int main() {
-    int fd = shm_open("/sharedmemory", O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
+    int fd = shm_open("/sharedmemry", O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
     if(fd == -1) {
         cout << "Error with shm_open: " << errno << endl;
     }
     struct shared* mem;
 
-    ftruncate(fd, sizeof(*mem));
+    int err = ftruncate(fd, sizeof(*mem));
+    if(err == -1) { 
+        cout << "Error with ftruncate: " << errno << endl;
+    }
 
     mem = static_cast<shared*>(mmap(NULL, sizeof(*mem), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0));
     if(mem == MAP_FAILED) {
         cout << "Error with mmap: " << errno << endl;
     }
     close(fd);
-    
-    for(int i = 0; i < 50; ++i) {
-        sem_wait(&(mem->full));
-        sem_wait(&(mem->mutex));
 
-        int value;
-        value = mem->arr[mem->out];
-        cout << "Consumer took: \t\t" << value << endl;
+    // Ensures that consumer enters after producer.
+    // Stops deadlocking bug.
+    sleep(2);
 
-        mem->out = (mem->out + 1) % 2;
+    for(int i = 0; i < 25; ++i) {
+        sem_wait(&(mem->semaphore));
 
-        sem_post(&(mem->mutex));
-        sem_post(&(mem->empty));
+        // Randomly selects which slot to check first
+        int check_first = rand() % 2;
+        int check_second = check_first == 0 ? 1 : 0;
+
+        if(mem->arr[check_first] != 0) {
+            cout << "\033[31mConsumer took: \t" << mem->arr[check_first] << endl;
+            mem->arr[check_first] = 0;
+        } else if (mem->arr[check_second] != 0) {
+            cout << "\033[31mConsumer took: \t" << mem->arr[check_second] << endl;
+            mem->arr[check_second] = 0;
+        }
+
+        sem_post(&(mem->semaphore));
+        sleep(rand() % 2);
     }
-    sem_destroy(&(mem->full));
-    sem_destroy(&(mem->empty));
-    sem_destroy(&(mem->mutex));
-
-    fd = shm_unlink("/sharedmemory");
-    if(fd == -1) {
-        cout << "Error with shm_unlink: " << errno << endl;
-    }
+    exit(EXIT_SUCCESS);
 }

@@ -13,8 +13,7 @@
 
 struct shared {
     int arr[2];
-    sem_t mutex, empty, full;
-    int in, out;
+    sem_t semaphore;
 };
 
 #endif
