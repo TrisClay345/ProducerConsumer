@@ -1,62 +1,33 @@
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <iostream>
-#include <semaphore.h>
-#include <ctime>
-
+#include "header.hpp"
+using std::cout; using std::endl;
 
 int main() {
-    // Set up shared memory
-    int flags = O_CREAT | O_RDWR;
-    int mode = S_IRUSR | S_IWUSR;
-    int fd = shm_open("/shrdmemry", flags, mode);
-    if(fd == -1) {
-        std::cout << "An error occured with the shm_open function." << std::endl;
-        exit(1);
-    }
-    // Resize shared memory
-    int err = ftruncate(fd, 128);
-    if(err = -1) {
-        std::cout << "An error occured with the ftruncate function" << std::endl;
-        exit(1);
-    }
+    int fd = shm_open("/shared_memory", O_CREAT | O_EXCL | O_RDWR, 0600);
+    struct shared *mem;
+    ftruncate(fd, sizeof(*mem));
 
-    // Get the memory in a read/writeable state
-    int prot = PROT_READ | PROT_WRITE;
-    void* tmp = mmap(NULL, 8, prot, MAP_SHARED, fd, 0);
-    if(tmp == MAP_FAILED) {
-        std::cout << "An error occured with the mmap function." << std::endl;
-        exit(1);
-    }
-    int* mem = static_cast<int*>(tmp);
+    mem = static_cast<shared*>(mmap(NULL, sizeof(*mem), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0));
 
-    // Create shared semaphore
-    sem_t* semaphore;
-    semaphore = sem_open("/mysemaphore", flags, mode, 1); 
-    if(semaphore == SEM_FAILED) {
-        std::cout << "An error occured with the sem_open function." << std::endl;
-        exit(1);
-    }
+    sem_init(&(mem->mutex), 1, 1);
+    sem_init(&(mem->full), 1, 0);
+    sem_init(&(mem->empty), 1, 2);
 
     srand(time(nullptr));
+    mem->in = 0; mem->out = 0;
+    int i = 0;
+    while(i < 10'000) {
+        sem_wait(&(mem->empty));
+        sem_wait(&(mem->mutex));
 
-    int counter = 10'000;
-    mem[0] = -1;
-    mem[1] = -1;
-    while(true) {
-        sem_wait(semaphore);
-        // Start of critical section
-        if(mem[0] == -1) {
-            mem[0] = rand() % 100;
-        } else if(mem[1] == -1) {
-            mem[0] = rand() % 100;
-        }
-        // End of critical section
-        sem_post(semaphore);
+        int value = rand();
+
+        mem->arr[mem->in] = value;
+
+        mem->in = ++(mem->in) % 2;
+
+        sem_post(&(mem->mutex));
+        sem_post(&(mem->full));
+        ++i;
     }
-
-    sem_unlink("/mysemaphore");
-    shm_unlink("/shrdmemry");
-}   
+    shm_unlink("/shared_memory");
+}
